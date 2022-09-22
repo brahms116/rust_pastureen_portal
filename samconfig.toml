@@ -1,0 +1,9 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "rust-pastureen-portal"
+region = "ap-southeast-2"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+disable_rollback = true
