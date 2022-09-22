@@ -1,3 +1,4 @@
+use rust_pastureen_portal_lib::*;
 use lambda_http::{run, service_fn, Body, Error, Request, RequestExt, Response};
 
 /// This is the main body for the function.
