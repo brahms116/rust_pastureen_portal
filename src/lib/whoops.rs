@@ -1,6 +1,8 @@
 use serde::Serialize;
 use std::{error, fmt};
 
+pub type Result<T, E = Whoops> = core::result::Result<T, E>;
+
 #[derive(Debug, Serialize)]
 /// An error designed to be readable and user friendly.
 pub struct Whoops {
