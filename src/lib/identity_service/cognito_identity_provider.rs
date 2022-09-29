@@ -69,7 +69,11 @@ impl CognitoIdentityProvider {
 
 #[async_trait]
 impl IdentityProvider for CognitoIdentityProvider {
-    async fn signup(&self, email: &str, username: &str) -> Result<String> {
+    async fn signup(
+        &self,
+        email: &str,
+        username: &str,
+    ) -> Result<String, Whoops<IdentityProviderErrKind>> {
         let result = self
             .client
             .admin_create_user()
@@ -91,7 +95,7 @@ impl IdentityProvider for CognitoIdentityProvider {
                 match service_error.kind {
                     AdminCreateUserErrorKind::UsernameExistsException(_) => {
                         return Err(Whoops {
-                            err_type: "cognito-username-exists".into(),
+                            err_type: IdentityProviderErrKind::UsernameExists,
                             reason: format!("username {}, is already taken", username),
                             context: "While creating a new user.".into(),
                             suggestion: "Try using a different username to signup.".into(),
@@ -102,7 +106,7 @@ impl IdentityProvider for CognitoIdentityProvider {
             }
 
             return Err(Whoops {
-                err_type: "cognito-sdk-unknown".into(),
+                err_type: IdentityProviderErrKind::Unknown,
                 context: "While creating a new user.".into(),
                 reason: format!("{}", err),
                 suggestion: "Be a better programmer.".into(),
@@ -110,11 +114,18 @@ impl IdentityProvider for CognitoIdentityProvider {
         }
     }
 
-    async fn login(&self, username: &str, password: &str) -> Result<String> {
+    async fn login(
+        &self,
+        username: &str,
+        password: &str,
+    ) -> Result<String, Whoops<IdentityProviderErrKind>> {
         todo!()
     }
 
-    async fn forgot_password(&self, username: &str) -> Result<String> {
+    async fn forgot_password(
+        &self,
+        username: &str,
+    ) -> Result<String, Whoops<IdentityProviderErrKind>> {
         todo!()
     }
 
@@ -123,7 +134,7 @@ impl IdentityProvider for CognitoIdentityProvider {
         username: &str,
         new_password: &str,
         confimation_code: &str,
-    ) -> Result<String> {
+    ) -> Result<String, Whoops<IdentityProviderErrKind>> {
         todo!()
     }
 
@@ -132,7 +143,7 @@ impl IdentityProvider for CognitoIdentityProvider {
         username: &str,
         old_password: &str,
         new_password: &str,
-    ) -> Result<String> {
+    ) -> Result<String, Whoops<IdentityProviderErrKind>> {
         todo!()
     }
 }
@@ -168,7 +179,7 @@ fn integration() {
             .await
             .expect_err("Should fail because username exists");
 
-        assert_eq!("cognito-username-exists", result.err_type);
+        assert_eq!(IdentityProviderErrKind::UsernameExists, result.err_type);
     }
 
     tokio_test::block_on(run());

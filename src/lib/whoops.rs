@@ -1,14 +1,13 @@
 use serde::Serialize;
+use std::fmt::Debug;
 use std::{error, fmt};
-
-pub type Result<T, E = Whoops> = core::result::Result<T, E>;
 
 #[derive(Debug, Serialize)]
 /// An error designed to be readable and user friendly.
-pub struct Whoops {
+pub struct Whoops<T: Serialize + PartialEq + Debug> {
     #[serde(rename = "errType")]
-    /// A kebab-cased string indicating the type of error that has occurred.
-    pub err_type: String,
+    /// When serialized into json, this should be kebab-cased string indicating the type of error that has occurred.
+    pub err_type: T,
 
     /// The context of where this error occurred.
     /// This is a more “user-friendly” version of a stack trace.
@@ -37,7 +36,7 @@ pub struct Whoops {
     pub suggestion: String,
 }
 
-impl Whoops {
+impl<T: Serialize + PartialEq + Debug> Whoops<T> {
     /// Appends to a Whoops' context.
     ///
     /// Useful when bubbling up a Whoops error and providing
@@ -64,13 +63,13 @@ impl Whoops {
     }
 }
 
-impl fmt::Display for Whoops {
+impl<T: Serialize + PartialEq + Debug> fmt::Display for Whoops<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "
 --- ERROR ---
-Error Type: {}
+Error Type: {:?}
 Context: {}
 Why: {}
 Suggestion: {}
@@ -81,4 +80,4 @@ Suggestion: {}
     }
 }
 
-impl error::Error for Whoops {}
+impl<T: Serialize + PartialEq + Debug + Into<String>> error::Error for Whoops<T> {}

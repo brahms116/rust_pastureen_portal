@@ -7,7 +7,15 @@ pub use congnito_identity_provider_config::*;
 use super::*;
 use async_trait::async_trait;
 use aws_config;
-use aws_sdk_cognitoidentityprovider::Client;
+use serde::Serialize;
+
+#[derive(Serialize, PartialEq, Debug)]
+pub enum IdentityProviderErrKind {
+    #[serde(rename = "unknown")]
+    Unknown,
+    #[serde(rename = "username-exists")]
+    UsernameExists,
+}
 
 #[async_trait]
 /// Provides identity and authentication capabilities
@@ -22,7 +30,11 @@ pub trait IdentityProvider {
     /// # Returns
     /// The created user's username
     ///
-    async fn signup(&self, email: &str, username: &str) -> Result<String>;
+    async fn signup(
+        &self,
+        email: &str,
+        username: &str,
+    ) -> Result<String, Whoops<IdentityProviderErrKind>>;
 
     /// Attempts a login
     ///
@@ -34,7 +46,11 @@ pub trait IdentityProvider {
     /// # Returns
     ///
     /// Returns a JWT token to fetch the cognito token
-    async fn login(&self, username: &str, password: &str) -> Result<String>;
+    async fn login(
+        &self,
+        username: &str,
+        password: &str,
+    ) -> Result<String, Whoops<IdentityProviderErrKind>>;
 
     /// Triggers a forgot password flow.
     ///
@@ -48,7 +64,10 @@ pub trait IdentityProvider {
     /// # Returns
     ///
     /// User's username
-    async fn forgot_password(&self, username: &str) -> Result<String>;
+    async fn forgot_password(
+        &self,
+        username: &str,
+    ) -> Result<String, Whoops<IdentityProviderErrKind>>;
 
     /// Confirms a password is forgotten and sets a new password.
     ///
@@ -67,7 +86,7 @@ pub trait IdentityProvider {
         username: &str,
         new_password: &str,
         confimation_code: &str,
-    ) -> Result<String>;
+    ) -> Result<String, Whoops<IdentityProviderErrKind>>;
 
     /// Replaces the user's password with a new password.
     ///
@@ -84,5 +103,5 @@ pub trait IdentityProvider {
         username: &str,
         old_password: &str,
         new_password: &str,
-    ) -> Result<String>;
+    ) -> Result<String, Whoops<IdentityProviderErrKind>>;
 }
