@@ -9,12 +9,28 @@ use async_trait::async_trait;
 use aws_config;
 use serde::Serialize;
 
+#[derive(Serialize)]
+pub struct LoginResponse {
+    access_token: String,
+    refresh_token: String,
+}
+
 #[derive(Serialize, PartialEq, Debug)]
 pub enum IdentityProviderErrKind {
     #[serde(rename = "unknown")]
     Unknown,
+
     #[serde(rename = "username-exists")]
     UsernameExists,
+
+    #[serde(rename = "new-password-needed")]
+    NewPasswordNeeded,
+
+    #[serde(rename = "unknown-auth-challenge")]
+    UnknownAuthChallenge,
+
+    #[serde(rename = "incorrect-credentials")]
+    IncorrectCredentials,
 }
 
 #[async_trait]
@@ -45,12 +61,12 @@ pub trait IdentityProvider {
     ///
     /// # Returns
     ///
-    /// Returns a JWT token to fetch the cognito token
+    /// Returns a login response containing the refresh_token and an access_token
     async fn login(
         &self,
         username: &str,
         password: &str,
-    ) -> Result<String, Whoops<IdentityProviderErrKind>>;
+    ) -> Result<LoginResponse, Whoops<IdentityProviderErrKind>>;
 
     /// Triggers a forgot password flow.
     ///
@@ -85,7 +101,7 @@ pub trait IdentityProvider {
         &self,
         username: &str,
         new_password: &str,
-        confimation_code: &str,
+        confirmation_code: &str,
     ) -> Result<String, Whoops<IdentityProviderErrKind>>;
 
     /// Replaces the user's password with a new password.

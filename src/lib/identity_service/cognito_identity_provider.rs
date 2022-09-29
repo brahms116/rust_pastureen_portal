@@ -118,24 +118,188 @@ impl IdentityProvider for CognitoIdentityProvider {
         &self,
         username: &str,
         password: &str,
-    ) -> Result<String, Whoops<IdentityProviderErrKind>> {
-        todo!()
+    ) -> Result<LoginResponse, Whoops<IdentityProviderErrKind>> {
+        let result = self
+            .client
+            .admin_initiate_auth()
+            .auth_flow(AuthFlowType::UserPasswordAuth)
+            .auth_parameters("USERNAME", username)
+            .auth_parameters("PASSWORD", password)
+            .auth_parameters("SECRET_HASH", self.compute_hash(username))
+            .send()
+            .await;
+
+        if let Ok(value) = result {
+            if let Some(ChallengeNameType::NewPasswordRequired) = value.challenge_name() {
+                return Err(Whoops {
+                    err_type: IdentityProviderErrKind::NewPasswordNeeded,
+                    context: "While trying to login.".into(),
+                    reason: "A new password is needed".into(),
+                    suggestion: "Try to change your password before attempting to login again."
+                        .into(),
+                });
+            }
+
+            if let None = value.authentication_result() {
+                return Err(Whoops {
+                    err_type: IdentityProviderErrKind::UnknownAuthChallenge,
+                    context: "While trying to login.".into(),
+                    reason: format!("{:?}",value.challenge_name().expect("challenge should exist when no authentication result is given")),
+                    suggestion: "We encounted an unknwon authentication challenge, ensure that cognito user pool is setup according to this program's requirements."
+                        .into(),
+                });
+            }
+
+            let update_request = self
+                .client
+                .admin_update_user_attributes()
+                .username(username)
+                .user_pool_id(&self.config.userpool_id)
+                .user_attributes(
+                    AttributeType::builder()
+                        .name("email_verified")
+                        .value("true")
+                        .build(),
+                )
+                .send()
+                .await;
+
+            if let Err(err) = update_request {
+                return Err(Whoops {
+                    err_type: IdentityProviderErrKind::Unknown,
+                    context: "While trying to update user attribute at login.".into(),
+                    reason: format!("{}", err),
+                    suggestion: "Be a better developer.".into(),
+                });
+            }
+
+            let authentication_result = value
+                .authentication_result()
+                .expect("None case should've been handled");
+
+            return Ok(LoginResponse {
+                access_token: authentication_result
+                    .access_token()
+                    .expect("Access token should be present")
+                    .to_owned(),
+                refresh_token: authentication_result
+                    .refresh_token()
+                    .expect("Refresh token should be present")
+                    .to_owned(),
+            });
+        }
+
+        let err = result.expect_err("Ok should've been handled");
+
+        if let SdkError::ServiceError { err, .. } = &err {
+            match err.kind {
+                AdminInitiateAuthErrorKind::NotAuthorizedException(_)
+                | AdminInitiateAuthErrorKind::UserNotFoundException(_) => {
+                    return Err(Whoops {
+                        err_type: IdentityProviderErrKind::IncorrectCredentials,
+                        context: "While trying to login.".into(),
+                        reason: "Supplied password and username were incorrect".into(),
+                        suggestion: "Try using a valid username and password.".into(),
+                    });
+                }
+                _ => {}
+            }
+        }
+        return Err(Whoops {
+            err_type: IdentityProviderErrKind::Unknown,
+            context: "While trying to login.".into(),
+            reason: format!("{}", err),
+            suggestion: "Be a better developer.".into(),
+        });
     }
 
     async fn forgot_password(
         &self,
         username: &str,
     ) -> Result<String, Whoops<IdentityProviderErrKind>> {
-        todo!()
+        let result = self
+            .client
+            .forgot_password()
+            .username(username)
+            .secret_hash(self.compute_hash(username))
+            .client_id(&self.config.client_id)
+            .send()
+            .await;
+
+        if let Err(err) = result {
+            if let SdkError::ServiceError { err, .. } = &err {
+                match err.kind {
+                    ForgotPasswordErrorKind::UserNotFoundException(_) => {
+                        return Err(Whoops {
+                            err_type: IdentityProviderErrKind::IncorrectCredentials,
+                            context: "While trying to forget password.".into(),
+                            reason: "Username could not be found".into(),
+                            suggestion: "Try using a valid username.".into(),
+                        });
+                    }
+                    _ => {}
+                }
+            }
+            return Err(Whoops {
+                err_type: IdentityProviderErrKind::Unknown,
+                context: "While trying to forget password.".into(),
+                reason: format!("{}", err),
+                suggestion: "Be a better developer.".into(),
+            });
+        }
+
+        return Ok(username.into());
     }
 
     async fn confirm_forgot_password(
         &self,
         username: &str,
         new_password: &str,
-        confimation_code: &str,
+        confirmation_code: &str,
     ) -> Result<String, Whoops<IdentityProviderErrKind>> {
-        todo!()
+        let result = self
+            .client
+            .confirm_forgot_password()
+            .client_id(&self.config.client_id)
+            .password(new_password)
+            .confirmation_code(confirmation_code)
+            .username(username)
+            .secret_hash(self.compute_hash(username))
+            .send()
+            .await;
+
+        if let Err(err) = result {
+            if let SdkError::ServiceError { err, .. } = &err {
+                match err.kind {
+                    ConfirmForgotPasswordErrorKind::UserNotFoundException(_) => {
+                        return Err(Whoops {
+                            err_type: IdentityProviderErrKind::IncorrectCredentials,
+                            context: "While trying to confirm forgot password.".into(),
+                            reason: "Supplied username is invalid.".into(),
+                            suggestion: "Try using a valid username.".into(),
+                        })
+                    },
+                    ConfirmForgotPasswordErrorKind::CodeMismatchException(_)=>{
+                        return Err(Whoops {
+                            err_type: IdentityProviderErrKind::IncorrectCredentials,
+                            context: "While trying to confirm forgot password.".into(),
+                            reason: "Code is invalid".into(),
+                            suggestion: "Try using a valid confirmation code or try \"forgot_password\" again.".into(),
+                        })
+                    },
+                    _ => {
+                        return Err(Whoops {
+                            err_type: IdentityProviderErrKind::Unknown,
+                            context: "While trying to confirm forgot password.".into(),
+                            reason: format!("{}",err),
+                            suggestion: "Be a better developer".into(),
+                        })
+                        
+                    }
+                }
+            }
+        }
+        Ok(username.into())
     }
 
     async fn change_password(
@@ -151,7 +315,7 @@ impl IdentityProvider for CognitoIdentityProvider {
 #[test]
 fn integration() {
     use std::env;
-    async fn run() {
+    async fn signup() {
         let userpool_id = env::var("USERPOOL_ID").expect("Missing env var USERPOOL_ID");
         let client_id = env::var("CLIENT_ID").expect("Missing env var CLIENT_ID");
         let client_secret = env::var("CLIENT_SECRET").expect("Missing env var CLIENT_SECRET");
@@ -182,5 +346,7 @@ fn integration() {
         assert_eq!(IdentityProviderErrKind::UsernameExists, result.err_type);
     }
 
-    tokio_test::block_on(run());
+    async fn login_expect_change_password() {}
+
+    // tokio_test::block_on(signup());
 }
